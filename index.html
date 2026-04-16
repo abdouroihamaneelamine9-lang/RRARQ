@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Routine quotidienne</title>
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        background: #f4f4f4;
+    }
+
+    .container {
+        max-width: 900px;
+        margin: auto;
+        padding: 20px;
+    }
+
+    .score {
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 10px;
+        padding: 10px;
+        background: #fff;
+        border-radius: 8px;
+        line-height: 1.6;
+    }
+
+    .fort { color: green; }
+    .faible { color: red; }
+
+    .top-bar {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .btn {
+        padding: 8px 12px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: bold;
+    }
+
+    .reset {
+        background:#111;
+        color:#fff;
+    }
+
+    .week {
+        background:#444;
+        color:#fff;
+    }
+
+    .card {
+        background: white;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 15px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
+    .time {
+        font-weight: bold;
+        margin-bottom: 10px;
+        display:flex;
+        justify-content:space-between;
+    }
+
+    .status-row {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .status-box {
+        flex: 1;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        opacity: 0.6;
+        transition: 0.2s;
+    }
+
+    .status-box.active {
+        opacity: 1;
+        border: 2px solid #000;
+        background: #f0f0f0;
+    }
+
+    .tasks {
+        white-space: pre-line;
+        margin-top: 10px;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+
+    .emoji-history {
+        margin-top: 10px;
+        font-size: 16px;
+        min-height: 20px;
+    }
+
+    .pop {
+        display:inline-block;
+        animation: pop 0.3s ease;
+    }
+
+    @keyframes pop {
+        0% { transform: scale(0.4); opacity: 0; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <div id="score" class="score"></div>
+
+    <div class="top-bar">
+        <button class="btn week" onclick="resetWeekEmojis()">Semaine</button>
+        <button class="btn reset" onclick="resetAll()">Réinitialiser tout</button>
+    </div>
+
+    <div id="blocks"></div>
+</div>
+
+<script>
+const TASKS = `apprendre, lire, copier, écrire, parler, voir, comprendre, pratiquer, se préparer, faire des rappels, propreté, entreprendre, ...
+lire le coran, écouter le coran, apprendre le coran.
+faire correctement les choses.`;
+
+const BLOCKS = [
+    "05:00–09:00",
+    "09:00–13:00",
+    "13:00–15:40",
+    "15:40–18:20",
+    "18:20–19:50",
+    "19:50–23:00",
+    "23:00–05:00"
+];
+
+const STATE_KEY = "routine_state";
+const EMOJI_KEY = "routine_emojis";
+const SCORE_KEY = "routine_score";
+
+/* ---------------- STORAGE ---------------- */
+
+function load(key, fallback) {
+    return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
+}
+
+function save(key, value) {
+    localStorage.setItem(key, JSON.stringify(value));
+}
+
+/* ---------------- SCORE ---------------- */
+
+function getScore() {
+    return load(SCORE_KEY, { fort: 0, faible: 0 });
+}
+
+function updateScore(type) {
+    const s = getScore();
+    s[type] += 1;
+    save(SCORE_KEY, s);
+}
+
+/* ---------------- EMOJIS (CONSERVÉ) ---------------- */
+
+function addEmoji(block, emoji) {
+    const emojis = load(EMOJI_KEY, {});
+    if (!emojis[block]) emojis[block] = [];
+    emojis[block].push(emoji);
+    save(EMOJI_KEY, emojis);
+}
+
+/* ---------------- STATE ---------------- */
+
+function setStatus(block, value) {
+    const state = load(STATE_KEY, {});
+    const prev = state[block];
+
+    state[block] = value;
+
+    if (value === "Fort") {
+        updateScore("fort");
+        addEmoji(block, "✅");
+    } else {
+        updateScore("faible");
+        addEmoji(block, "❌");
+    }
+
+    save(STATE_KEY, state);
+    render();
+}
+
+/* ---------------- WEEK RESET EMOJIS ---------------- */
+
+function resetWeekEmojis() {
+    if (!confirm("Effacer les emojis de la semaine ?")) return;
+    localStorage.removeItem(EMOJI_KEY);
+    render();
+}
+
+/* ---------------- RESET ALL ---------------- */
+
+function resetAll() {
+    if (!confirm("Réinitialiser tout ?")) return;
+
+    localStorage.removeItem(STATE_KEY);
+    localStorage.removeItem(EMOJI_KEY);
+    localStorage.removeItem(SCORE_KEY);
+
+    render();
+}
+
+/* ---------------- RENDER ---------------- */
+
+function render() {
+    const container = document.getElementById("blocks");
+    const scoreEl = document.getElementById("score");
+
+    const state = load(STATE_KEY, {});
+    const emojis = load(EMOJI_KEY, {});
+    const score = getScore();
+
+    container.innerHTML = "";
+
+    BLOCKS.forEach(block => {
+        const status = state[block] || "Fort";
+        const history = emojis[block] || [];
+
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const isSleep = block === "23:00–05:00";
+
+        card.innerHTML = `
+            <div class="time">
+                <span>${block}</span>
+            </div>
+
+            <div class="status-row">
+
+                <div class="status-box ${status === "Fort" ? "active" : ""}">
+                    <span class="fort">Statut : Fort</span>
+                    <input type="checkbox"
+                        ${status === "Fort" ? "checked" : ""}
+                        onchange="setStatus('${block}', 'Fort')">
+                </div>
+
+                <div class="status-box ${status === "Faible" ? "active" : ""}">
+                    <span class="faible">Statut : Faible</span>
+                    <input type="checkbox"
+                        ${status === "Faible" ? "checked" : ""}
+                        onchange="setStatus('${block}', 'Faible')">
+                </div>
+
+            </div>
+
+            <div class="tasks">${isSleep ? "Dormir correctement." : TASKS}</div>
+
+            <div class="emoji-history">
+                ${history.map(e => `<span class="pop">${e}</span>`).join(" ")}
+            </div>
+        `;
+
+        container.appendChild(card);
+    });
+
+    scoreEl.innerHTML = `
+        <div>✅ Fort</div>
+        <div>❌ Faible</div>
+        <div>🏆 Score : ${score.fort} ✅ - ${score.faible} ❌</div>
+    `;
+}
+
+render();
+</script>
+
+</body>
+</html>
