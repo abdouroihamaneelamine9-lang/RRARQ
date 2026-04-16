@@ -3,14 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-
 <title>Routine quotidienne</title>
-
-<!-- PWA : manifest -->
-<link rel="manifest" href="manifest.json">
-
-<!-- Couleur de l'app -->
-<meta name="theme-color" content="#ffffff">
 
 <style>
     body {
@@ -65,6 +58,26 @@
         gap: 10px;
     }
 
+    .time-edit-input {
+        padding: 4px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        width: 140px;
+    }
+
+    .time-actions {
+        display: flex;
+        gap: 5px;
+    }
+
+    .time-actions button {
+        padding: 3px 6px;
+        font-size: 11px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
     .status-row {
         display: flex;
         gap: 10px;
@@ -97,6 +110,16 @@
         font-size: 13px;
     }
 
+    .note-item button {
+        border: none;
+        background: #333;
+        color: #fff;
+        padding: 4px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 11px;
+    }
+
     .note-input {
         display: flex;
         gap: 6px;
@@ -125,28 +148,27 @@
 <div class="container">
 
     <div class="title">Responsabilité</div>
+    <br>
 
     <div id="score" class="score"></div>
+
+    <br>
 
     <div class="top-bar">
         <button class="btn" onclick="resetWeekEmojis()">Effacer emoji</button>
         <button class="btn" onclick="resetAll()">Réinitialiser tout</button>
     </div>
 
+    <br>
+
     <div id="blocks"></div>
 </div>
 
 <script>
-/* ========= PWA SERVICE WORKER ========= */
-if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("service-worker.js");
-}
-
-/* ========= DONNÉES ========= */
 
 const DEFAULT_NOTES = [
-"apprendre, lire, écrire, pratiquer",
-"lire le coran, écouter le coran",
+"apprendre, lire, copier, écrire, parler, voir, comprendre, pratiquer, se préparer, faire des rappels, propreté, entreprendre, ...",
+"lire le coran, écouter le coran, apprendre le coran.",
 "faire correctement les choses"
 ];
 
@@ -165,18 +187,15 @@ const EMOJI_KEY = "routine_emojis";
 const SCORE_KEY = "routine_score";
 const NOTES_KEY = "routine_notes";
 
-/* ========= LOCAL STORAGE ========= */
-
+/* STORAGE */
 function load(key, fallback){
     return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
 }
-
 function save(key, value){
     localStorage.setItem(key, JSON.stringify(value));
 }
 
-/* ========= SCORE ========= */
-
+/* SCORE */
 function getScore(){
     return load(SCORE_KEY,{fort:0,faible:0});
 }
@@ -187,8 +206,6 @@ function updateScore(type){
     save(SCORE_KEY,s);
 }
 
-/* ========= EMOJI ========= */
-
 function addEmoji(block, emoji){
     const e = load(EMOJI_KEY,{});
     if(!e[block]) e[block]=[];
@@ -196,8 +213,19 @@ function addEmoji(block, emoji){
     save(EMOJI_KEY,e);
 }
 
-/* ========= STATUS ========= */
+/* NOTES */
+function getNotes(blockIndex){
+    const notes = load(NOTES_KEY,{});
 
+    if(!notes[blockIndex]){
+        notes[blockIndex] = [...DEFAULT_NOTES];
+        save(NOTES_KEY, notes);
+    }
+
+    return notes[blockIndex];
+}
+
+/* STATUS */
 function setStatus(block,value){
     const state = load(STATE_KEY,{});
     state[block]=value;
@@ -211,8 +239,7 @@ function setStatus(block,value){
     render();
 }
 
-/* ========= RESET ========= */
-
+/* RESET */
 function resetWeekEmojis(){
     localStorage.removeItem(EMOJI_KEY);
     render();
@@ -223,33 +250,50 @@ function resetAll(){
     render();
 }
 
-/* ========= NOTES ========= */
+/* BLOCKS */
+function getActiveBlocks(){
+    const custom = load("routine_blocks_custom", null);
+    return custom || BLOCKS;
+}
 
-function getNotes(blockIndex){
-    const notes = load(NOTES_KEY,{});
+/* TIME EDIT */
+function enableTimeEdit(el, index){
+    const input = document.createElement("input");
+    input.className = "time-edit-input";
+    input.value = el.innerText;
 
-    if(!notes[blockIndex]){
-        notes[blockIndex] = [...DEFAULT_NOTES];
-        save(NOTES_KEY, notes);
+    const actions = document.createElement("div");
+    actions.className = "time-actions";
+
+    const btnOk = document.createElement("button");
+    btnOk.innerText = "Valider";
+
+    const btnCancel = document.createElement("button");
+    btnCancel.innerText = "Annuler";
+
+    btnOk.onclick = () => {
+        const blocks = getActiveBlocks();
+        blocks[index] = input.value;
+        localStorage.setItem("routine_blocks_custom", JSON.stringify(blocks));
+        render();
+    };
+
+    btnCancel.onclick = () => render();
+
+    actions.appendChild(btnOk);
+    actions.appendChild(btnCancel);
+
+    el.replaceWith(input);
+    input.parentNode.appendChild(actions);
+}
+
+document.addEventListener("click",(e)=>{
+    if(e.target.dataset && e.target.dataset.time==="true"){
+        enableTimeEdit(e.target, parseInt(e.target.dataset.index));
     }
+});
 
-    return notes[blockIndex];
-}
-
-function addNoteUI(blockIndex){
-    const input = document.getElementById("input-"+blockIndex);
-    const v = input.value.trim();
-    if(!v) return;
-
-    const notes = load(NOTES_KEY,{});
-    if(!notes[blockIndex]) notes[blockIndex]=[];
-
-    notes[blockIndex].push(v);
-    save(NOTES_KEY,notes);
-
-    render();
-}
-
+/* DELETE NOTE */
 function deleteNote(btn){
     const item = btn.closest(".note-item");
 
@@ -258,22 +302,39 @@ function deleteNote(btn){
 
     const notes = load(NOTES_KEY,{});
 
+    if(!notes[blockIndex]) return;
+
     notes[blockIndex].splice(noteIndex,1);
     save(NOTES_KEY,notes);
 
     render();
 }
 
-/* ========= RENDER ========= */
+/* ADD NOTE */
+function addNoteUI(blockIndex){
+    const input = document.getElementById("input-"+blockIndex);
+    const v = input.value.trim();
+    if(!v) return;
 
+    const notes = load(NOTES_KEY,{});
+    if(!notes[blockIndex]) notes[blockIndex]=[...DEFAULT_NOTES];
+
+    notes[blockIndex].push(v);
+    save(NOTES_KEY,notes);
+
+    render();
+}
+
+/* RENDER */
 function render(){
     const container = document.getElementById("blocks");
     const score = getScore();
     const emojis = load(EMOJI_KEY,{});
+    const blocks = getActiveBlocks();
 
     container.innerHTML = "";
 
-    BLOCKS.forEach((block,index)=>{
+    blocks.forEach((block,index)=>{
 
         const notes = getNotes(index);
         const history = emojis[block] || [];
@@ -283,18 +344,18 @@ function render(){
 
         card.innerHTML = `
             <div class="time">
-                <span>${block}</span>
-                <span>${history.join(" ")}</span>
+                <span data-time="true" data-index="${index}">${block}</span>
+                <span>${history.map(e=>`<span>${e}</span>`).join(" ")}</span>
             </div>
 
             <div class="status-row">
                 <div class="status-box">
-                    <span>Fort</span>
+                    <span>Fort <span>✅</span></span>
                     <input type="checkbox" onchange="setStatus('${block}','Fort')">
                 </div>
 
                 <div class="status-box">
-                    <span>Faible</span>
+                    <span>Faible <span>❌</span></span>
                     <input type="checkbox" onchange="setStatus('${block}','Faible')">
                 </div>
             </div>
@@ -303,7 +364,7 @@ function render(){
                 ${notes.map((n,i)=>`
                     <div class="note-item" data-block-index="${index}" data-note-index="${i}">
                         <span>${n}</span>
-                        <button onclick="deleteNote(this)">X</button>
+                        <button onclick="deleteNote(this)">note${i+1}</button>
                     </div>
                 `).join("")}
 
@@ -322,6 +383,7 @@ function render(){
 }
 
 render();
+
 </script>
 
 </body>
